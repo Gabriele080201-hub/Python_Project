@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from engine_state import EngineState
+from .engine_state import EngineState
 
 class EngineManager:
     def __init__(self, model, scaler, feature_cols, window_size, device="cpu"):
