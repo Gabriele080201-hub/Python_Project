@@ -191,7 +191,7 @@ if fleet_data:
         df_fleet.style.background_gradient(subset=["rul_prediction"], cmap="RdYlGn", vmin=0, vmax=150)
         .format({"rul_prediction": "{:.2f}"}, na_rep="—"),
         use_container_width=True,
-        height=650,
+        height=350,
     )
 else:
     st.info("Nessun dato disponibile. Avvia la simulazione.")
