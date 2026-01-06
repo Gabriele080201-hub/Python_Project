@@ -15,7 +15,6 @@ from inference.fleet_controller import FleetController
 PAGE_TITLE = "Dashboard Manutenzione Predittiva"
 DATA_PATH = os.path.join("model_training", "data", "test_FD001.txt")
 UPDATE_DELAY = 1.5  # Secondi tra gli aggiornamenti automatici
-SENSORS_TO_PLOT = ["sensor2", "sensor3", "sensor4", "sensor7", "sensor11", "sensor12"] # Selezione sensori significativi
 
 st.set_page_config(
     page_title=PAGE_TITLE,
@@ -63,38 +62,54 @@ def load_data_and_initialize():
         st.error(f"Errore critico durante l'inizializzazione: {e}")
         st.stop()
 
-def create_sensor_grid(df):
-    """Genera una griglia di grafici Plotly per i sensori selezionati."""
+def create_sensor_grid(df, sensors_to_plot=None, cols=4):
+    """Genera una griglia di grafici Plotly per i sensori disponibili nello storico."""
+    if df is None or df.empty:
+        return go.Figure()
+
+    if sensors_to_plot is None:
+        # Default: tutte le feature (sensori) presenti nel df, escludendo colonne non-sensore
+        excluded = {"cycle", "rul_prediction"}
+        sensors_to_plot = [c for c in df.columns if c not in excluded]
+
+    sensors_to_plot = [s for s in sensors_to_plot if s in df.columns]
+    if not sensors_to_plot:
+        return go.Figure()
+
+    cols = max(1, int(cols))
+    rows = (len(sensors_to_plot) + cols - 1) // cols
+
     fig = make_subplots(
-        rows=2, cols=3, 
-        subplot_titles=SENSORS_TO_PLOT,
-        vertical_spacing=0.15
+        rows=rows,
+        cols=cols,
+        subplot_titles=sensors_to_plot,
+        vertical_spacing=0.12
     )
-    
-    for i, sensor_name in enumerate(SENSORS_TO_PLOT):
-        row = (i // 3) + 1
-        col = (i % 3) + 1
-        
-        if sensor_name in df.columns:
-            fig.add_trace(
-                go.Scatter(
-                    x=df['cycle'], 
-                    y=df[sensor_name], 
-                    mode='lines', 
-                    name=sensor_name,
-                    line=dict(width=1.5)
-                ),
-                row=row, col=col
-            )
-            
-            fig.update_xaxes(title_text="Cicli", row=row, col=col, showgrid=True)
-            fig.update_yaxes(showgrid=True, row=row, col=col)
+
+    for i, sensor_name in enumerate(sensors_to_plot):
+        row = (i // cols) + 1
+        col = (i % cols) + 1
+
+        fig.add_trace(
+            go.Scatter(
+                x=df["cycle"],
+                y=df[sensor_name],
+                mode="lines",
+                name=sensor_name,
+                line=dict(width=1.5),
+            ),
+            row=row,
+            col=col,
+        )
+
+        fig.update_xaxes(title_text="Cicli", row=row, col=col, showgrid=True)
+        fig.update_yaxes(showgrid=True, row=row, col=col)
 
     fig.update_layout(
-        height=500, 
+        height=max(350, 220 * rows),
         showlegend=False,
         template="plotly_white",
-        margin=dict(l=20, r=20, t=40, b=20)
+        margin=dict(l=20, r=20, t=40, b=20),
     )
     return fig
 
@@ -159,52 +174,52 @@ with col_ctrl3:
 st.divider()
 
 # 4. Dashboard Principale
-col_left, col_right = st.columns([1, 2])
 
-with col_left:
-    st.subheader("Stato Flotta")
-    fleet_data = st.session_state.controller.get_fleet_table()
-    
-    if fleet_data:
-        df_fleet = pd.DataFrame(fleet_data)
-        # rul_prediction può essere None finché il buffer non è pieno (window_size cicli).
-        # Convertiamo a numerico: None/valori non parseabili -> NaN (evita crash nello Styler).
-        if "rul_prediction" in df_fleet.columns:
-            df_fleet["rul_prediction"] = pd.to_numeric(df_fleet["rul_prediction"], errors="coerce")
-        # Formattazione condizionale per evidenziare RUL critiche
-        st.dataframe(
-            df_fleet.style.background_gradient(subset=['rul_prediction'], cmap='RdYlGn', vmin=0, vmax=150)
-            .format({'rul_prediction': '{:.2f}'}, na_rep="—"),
-            use_container_width=True,
-            height=600
-        )
-    else:
-        st.info("Nessun dato disponibile. Avvia la simulazione.")
+# --- Stato Flotta (full-width) ---
+st.subheader("Stato Flotta")
+fleet_data = st.session_state.controller.get_fleet_table()
 
-with col_right:
-    st.subheader("Dettaglio Motore")
-    
-    # Recupera gli ID disponibili dallo storico
-    available_ids = sorted(list(st.session_state.controller.history.keys()))
-    
-    if available_ids:
-        selected_id = st.selectbox("Seleziona ID Motore per analisi:", available_ids)
-        
-        # Recupera DataFrame storico specifico per il motore selezionato
-        # Nota: richiede che FleetController abbia il metodo get_engine_history_df implementato
-        engine_df = st.session_state.controller.get_engine_history_df(selected_id)
-        
-        if not engine_df.empty:
-            # Grafico RUL
-            st.plotly_chart(create_rul_chart(engine_df), use_container_width=True)
-            
-            # Grafico Sensori
-            st.markdown("##### Telemetria Sensori")
-            st.plotly_chart(create_sensor_grid(engine_df), use_container_width=True)
-        else:
-            st.warning("Dati insufficienti per il motore selezionato.")
+if fleet_data:
+    df_fleet = pd.DataFrame(fleet_data)
+    if "rul_prediction" in df_fleet.columns:
+        # None/valori non parseabili -> NaN (evita crash nello Styler)
+        df_fleet["rul_prediction"] = pd.to_numeric(df_fleet["rul_prediction"], errors="coerce")
+        # Ordina per RUL crescente (NaN in fondo)
+        df_fleet = df_fleet.sort_values(by="rul_prediction", ascending=True, na_position="last")
+
+    st.dataframe(
+        df_fleet.style.background_gradient(subset=["rul_prediction"], cmap="RdYlGn", vmin=0, vmax=150)
+        .format({"rul_prediction": "{:.2f}"}, na_rep="—"),
+        use_container_width=True,
+        height=650,
+    )
+else:
+    st.info("Nessun dato disponibile. Avvia la simulazione.")
+
+st.divider()
+
+# --- Dettaglio Motore (full-width) ---
+st.subheader("Dettaglio Motore")
+
+# Recupera gli ID disponibili dallo storico
+available_ids = sorted(list(st.session_state.controller.history.keys()))
+
+if available_ids:
+    selected_id = st.selectbox("Seleziona ID Motore per analisi:", available_ids)
+
+    engine_df = st.session_state.controller.get_engine_history_df(selected_id)
+
+    if not engine_df.empty:
+        st.plotly_chart(create_rul_chart(engine_df), use_container_width=True)
+
+        st.markdown("##### Telemetria Sensori")
+        # Mostra tutti i sensori disponibili nello storico (feature_cols dal controller)
+        sensors = getattr(st.session_state.controller, "feature_cols", None)
+        st.plotly_chart(create_sensor_grid(engine_df, sensors_to_plot=sensors), use_container_width=True)
     else:
-        st.write("In attesa di dati dai motori...")
+        st.warning("Dati insufficienti per il motore selezionato.")
+else:
+    st.write("In attesa di dati dai motori...")
 
 # 5. Logica Auto-Run
 if st.session_state.autorun:
