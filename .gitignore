@@ -1,0 +1,25 @@
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.vscode/
+.idea/
+
+# Cursor / Claude local settings
+.claude/settings.local.json
+
+# Training folder (not needed for runtime dashboard)
+model_training/
+
