@@ -1,10 +1,12 @@
 """
-Predictor Module - API for RUL predictions.
+Predictor
 
-This module provides a simple interface to predict the
-Remaining Useful Life (RUL) of aircraft engines.
+This module provides the interface to the ML model for RUL prediction.
 
-Usage example:
+The Predictor class hides all the complexity of the neural network,
+offering a simple predict() method.
+
+Usage:
     from predictor import Predictor
 
     predictor = Predictor()
@@ -19,21 +21,15 @@ from _model.loader import load_model_and_scaler
 
 class Predictor:
     """
-    Class to predict the Remaining Useful Life (RUL) of an engine.
+    Predicts the Remaining Useful Life (RUL) of an engine.
 
-    This class hides all the ML model complexity,
-    offering a simple interface: give data, get prediction.
+    This class wraps the ML model and provides a simple interface:
+    give sensor data, get a RUL prediction.
 
     Attributes:
-        window_size (int): Number of timesteps required (30)
-        num_sensors (int): Number of sensors required (14)
-        feature_cols (list): Names of sensor columns
-
-    Example:
-        >>> predictor = Predictor()
-        >>> # window has shape (30, 14) - 30 timesteps, 14 sensors
-        >>> rul = predictor.predict(window)
-        >>> print(f"Predicted RUL: {rul:.1f} cycles")
+        window_size: Number of timesteps required (30)
+        num_sensors: Number of sensors required (14)
+        feature_cols: Names of sensor columns
     """
 
     def __init__(self, model_path=None, scaler_path=None):
@@ -44,28 +40,28 @@ class Predictor:
             model_path: Path to model file (optional, uses default)
             scaler_path: Path to scaler file (optional, uses default)
         """
-        # Load model and scaler (details hidden in _model/)
+        # Load model and scaler from _model/ folder
         result = load_model_and_scaler(model_path, scaler_path)
-        self._model = result[0]
-        self._scaler = result[1]
-        self._config = result[2]
-        self._feature_cols = result[3]
-        self._device = result[4]
+        self.model = result[0]
+        self.scaler = result[1]
+        self.config = result[2]
+        self.feature_cols_list = result[3]
+        self.device = result[4]
 
     @property
     def window_size(self):
         """Return the number of timesteps required for a prediction."""
-        return self._config["window_size"]
+        return self.config["window_size"]
 
     @property
     def num_sensors(self):
         """Return the number of sensors required."""
-        return len(self._feature_cols)
+        return len(self.feature_cols_list)
 
     @property
     def feature_cols(self):
         """Return the names of sensor columns."""
-        return self._feature_cols.copy()
+        return self.feature_cols_list.copy()
 
     def predict(self, window):
         """
@@ -76,14 +72,7 @@ class Predictor:
                     Contains data from 30 timesteps for 14 sensors
 
         Returns:
-            float: Predicted RUL in cycles
-
-        Raises:
-            ValueError: If data shape is incorrect
-
-        Example:
-            >>> window = np.random.randn(30, 14)  # example data
-            >>> rul = predictor.predict(window)
+            Predicted RUL in cycles (float)
         """
         # Check data shape
         window = np.array(window, dtype=np.float32)
@@ -98,7 +87,7 @@ class Predictor:
         window = window[np.newaxis, :, :]
 
         # Normalize the data
-        window = self._scaler.transform(window)
+        window = self.scaler.transform(window)
 
         # Remove batch dimension: (1, 30, 14) -> (30, 14)
         window = window[0]
@@ -108,11 +97,11 @@ class Predictor:
         tensor = torch.tensor(window, dtype=torch.float32)
         tensor = tensor.unsqueeze(0)  # Add batch
         tensor = tensor.unsqueeze(-1)  # Add features
-        tensor = tensor.to(self._device)
+        tensor = tensor.to(self.device)
 
         # Run prediction (no gradient computation)
         with torch.no_grad():
-            prediction = self._model(tensor)
+            prediction = self.model(tensor)
 
         # Return value as Python float
         return float(prediction.item())

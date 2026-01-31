@@ -1,8 +1,10 @@
 """
-Engine Module - Single engine management.
+Engine
 
-Contains the Engine class that represents an engine
-with its data buffer and RUL predictions.
+This module manages a single engine in the simulation.
+
+The Engine class keeps a buffer of sensor readings and
+computes RUL predictions when enough data is available.
 """
 
 from collections import deque
@@ -18,15 +20,9 @@ class Engine:
     compute a RUL prediction.
 
     Attributes:
-        engine_id (int): Unique engine identifier
-        cycle (int): Current operating cycle
-        rul (float or None): Latest RUL prediction (None if not available)
-
-    Example:
-        >>> engine = Engine(engine_id=1, predictor=predictor)
-        >>> engine.add_reading(sensor_data)
-        >>> if engine.is_ready():
-        ...     print(f"RUL: {engine.rul}")
+        engine_id: Unique engine identifier
+        cycle: Current operating cycle
+        rul: Latest RUL prediction (None if not available)
     """
 
     def __init__(self, engine_id, predictor):
@@ -34,17 +30,16 @@ class Engine:
         Initialize a new Engine.
 
         Args:
-            engine_id (int): Unique engine identifier
-            predictor (Predictor): Predictor object for predictions
+            engine_id: Unique engine identifier
+            predictor: Predictor object for predictions
         """
         self.engine_id = engine_id
         self.cycle = 0
         self.rul = None
 
-        # Private attributes
-        self._predictor = predictor
-        self._buffer = deque(maxlen=predictor.window_size)
-        self._history = []  # List of tuples (cycle, rul)
+        self.predictor = predictor
+        self.buffer = deque(maxlen=predictor.window_size)
+        self.history = []  # List of tuples (cycle, rul)
 
     def add_reading(self, sensor_data):
         """
@@ -57,35 +52,28 @@ class Engine:
             sensor_data: Numpy array with sensor values
         """
         self.cycle += 1
-        self._buffer.append(sensor_data)
+        self.buffer.append(sensor_data)
 
         # If buffer is full, compute prediction
         if self.is_ready():
-            window = np.array(self._buffer)
-            self.rul = self._predictor.predict(window)
-            self._history.append((self.cycle, self.rul))
+            window = np.array(self.buffer)
+            self.rul = self.predictor.predict(window)
+            self.history.append((self.cycle, self.rul))
 
     def is_ready(self):
         """
         Check if the engine has enough data for a prediction.
 
         Returns:
-            bool: True if buffer is full, False otherwise
+            True if buffer is full, False otherwise
         """
-        return len(self._buffer) == self._predictor.window_size
+        return len(self.buffer) == self.predictor.window_size
 
     def get_history(self):
         """
         Return the history of RUL predictions.
 
         Returns:
-            list: List of tuples (cycle, rul) with all predictions
+            List of tuples (cycle, rul) with all predictions
         """
-        return self._history.copy()
-
-    def reset(self):
-        """Reset the engine state."""
-        self.cycle = 0
-        self.rul = None
-        self._buffer.clear()
-        self._history.clear()
+        return self.history.copy()

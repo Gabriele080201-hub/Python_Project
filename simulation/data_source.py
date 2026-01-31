@@ -1,15 +1,16 @@
 """
-DataSource Module - Data source for the simulation.
+DataSource
 
-Contains the DataSource class that reads dataset data
-and provides it step by step, simulating real-time streaming.
+This is the module for simulating the data.
+
+The class DataSource contains especially step(), used to 
+simulate the incoming of one row of events for each engine
 """
 
 import numpy as np
 import pandas as pd
 
 
-# Column names for the NASA C-MAPSS dataset
 COLUMN_NAMES = (
     ["id", "cycle"] +
     ["setting1", "setting2", "setting3"] +
@@ -19,64 +20,57 @@ COLUMN_NAMES = (
 
 class DataSource:
     """
-    Data source for engine monitoring simulation.
+    Data source for the simulation.
 
-    Reads data from the NASA C-MAPSS dataset and provides it
-    one cycle at a time for each engine, simulating
-    real-time data streaming.
+    The class reads the dataset and provides
+    data step by step using step(), one cycle at a time for
+    each engine.
 
     Attributes:
-        feature_cols (list): List of column names used as features
-
-    Example:
-        >>> source = DataSource(dataframe, feature_cols)
-        >>> events = source.step()  # Get data for all engines
+        feature_cols: list of columns used as input features.
     """
 
-    def __init__(self, dataframe, feature_cols):
-        """
-        Initialize the DataSource.
 
+    def __init__(self, dataframe, feature_cols):
+        """ 
         Args:
-            dataframe (pd.DataFrame): DataFrame with sensor data
-            feature_cols (list): List of columns to use as features
+            dataframe: DataFrame of sensor data
+            feature_cols: List of columns to use
         """
         self.feature_cols = feature_cols
 
-        # Separate data for each engine
-        self._engines_data = {}
-        for engine_id, group in dataframe.groupby("id"):
-            # Sort by cycle and reset index
-            sorted_data = group.sort_values("cycle").reset_index(drop=True)
-            self._engines_data[engine_id] = sorted_data
+        self.engines_data = {}
 
-        # Track current position for each engine
-        self._current_index = {eid: 0 for eid in self._engines_data}
+        for engine_id, group in dataframe.groupby("id"):
+            sorted_data = group.sort_values("cycle").reset_index(drop=True)
+            self.engines_data[engine_id] = sorted_data
+
+        self.current_index = {eid: 0 for eid in self.engines_data}
 
     def step(self):
         """
-        Advance one step and return data for all engines.
+        Move the simulation forward by one step.
 
-        Returns:
-            list: List of dicts, one per engine, with:
-                - engine_id: Engine ID
-                - cycle: Current cycle number
-                - features: Numpy array with sensor values
+        It returns a list of events, one for each engine, 
+        with the following fields:
+            - engine_id: Engine ID
+            - cycle: Current cycle 
+            - features: numpy array with sensor values
         """
+
         events = []
 
-        for engine_id, df_engine in self._engines_data.items():
-            idx = self._current_index[engine_id]
+        for engine_id, df_engine in self.engines_data.items():
+            idx = self.current_index[engine_id]
 
-            # If we finished the data, restart from beginning
+            # If we finished the data, restart from beginning otherwise
+            # it would raise an error.
             if idx >= len(df_engine):
-                self._current_index[engine_id] = 0
+                self.current_index[engine_id] = 0
                 idx = 0
 
-            # Read current row
             row = df_engine.iloc[idx]
 
-            # Create event with data
             event = {
                 "engine_id": engine_id,
                 "cycle": int(row["cycle"]),
@@ -84,20 +78,6 @@ class DataSource:
             }
             events.append(event)
 
-            # Advance to next index
-            self._current_index[engine_id] += 1
+            self.current_index[engine_id] += 1
 
         return events
-
-    def reset(self):
-        """Reset the data source to the beginning."""
-        self._current_index = {eid: 0 for eid in self._engines_data}
-
-    def get_engine_ids(self):
-        """
-        Return the list of available engine IDs.
-
-        Returns:
-            list: List of engine IDs
-        """
-        return list(self._engines_data.keys())
