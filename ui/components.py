@@ -1,7 +1,8 @@
 """
-Components Module
+Components Module - UI components for the Streamlit dashboard.
 
-UI components and state management for the Streamlit dashboard.
+Contains functions to render the user interface
+and manage session state.
 """
 
 import os
@@ -10,10 +11,8 @@ import time
 import pandas as pd
 import streamlit as st
 
-from inference.data_source import DataSource, column_names
-from inference.engine_manager import EngineManager
-from inference.fleet_controller import FleetController
-from inference.load_bundle import load_inference_bundle
+from predictor import Predictor
+from simulation import Fleet, DataSource, COLUMN_NAMES
 from ui import charts
 from ui.config import DATA_PATH, UPDATE_DELAY
 
@@ -24,53 +23,42 @@ from ui.config import DATA_PATH, UPDATE_DELAY
 
 def initialize_state():
     """
-    Initialize session state if not already done.
+    Initialize Streamlit session state.
 
-    Loads model, scaler, and test data. Creates the FleetController.
+    Loads the model, data, and creates the Fleet for simulation.
+    Runs only once at application startup.
     """
-    if "controller" not in st.session_state:
-        with st.spinner("Starting system and loading models..."):
-            st.session_state.controller = _create_controller()
+    if "fleet" not in st.session_state:
+        with st.spinner("Starting system..."):
+            st.session_state.fleet = _create_fleet()
             st.session_state.autorun = False
 
 
-def _create_controller():
+def _create_fleet():
     """
-    Create and configure the FleetController.
+    Create and configure the Fleet for simulation.
 
     Returns:
-        FleetController ready for simulation.
+        Fleet: Fleet object ready for simulation
     """
-    try:
-        # Load model and scaler
-        bundle = load_inference_bundle()
+    # Create Predictor (loads the model)
+    predictor = Predictor()
 
-        # Check data file exists
-        if not os.path.exists(DATA_PATH):
-            st.error(f"Data file not found: {DATA_PATH}")
-            st.stop()
-
-        # Load test data (NASA C-MAPSS format)
-        df_test = pd.read_csv(DATA_PATH, sep=" ", header=None)
-        df_test = df_test.iloc[:, :26]  # Remove empty columns
-        df_test.columns = column_names
-
-        # Create system components
-        data_source = DataSource(df_test, bundle.feature_cols)
-
-        engine_manager = EngineManager(
-            model=bundle.model,
-            scaler=bundle.scaler,
-            feature_cols=bundle.feature_cols,
-            window_size=bundle.config["window_size"],
-            device=bundle.device
-        )
-
-        return FleetController(data_source, engine_manager)
-
-    except Exception as e:
-        st.error(f"Critical error during initialization: {e}")
+    # Check that data file exists
+    if not os.path.exists(DATA_PATH):
+        st.error(f"Data file not found: {DATA_PATH}")
         st.stop()
+
+    # Load NASA C-MAPSS dataset
+    df = pd.read_csv(DATA_PATH, sep=" ", header=None)
+    df = df.iloc[:, :26]  # Remove empty columns
+    df.columns = COLUMN_NAMES
+
+    # Create DataSource
+    data_source = DataSource(df, predictor.feature_cols)
+
+    # Create and return Fleet
+    return Fleet(predictor, data_source)
 
 
 # =============================================================================
@@ -78,36 +66,36 @@ def _create_controller():
 # =============================================================================
 
 def render_control_bar():
-    """Render the control bar with simulation buttons."""
+    """Render the control bar with buttons."""
     col1, col2, col3, _ = st.columns([1, 1, 1, 4])
 
     with col1:
         if st.button("Manual Step", use_container_width=True):
-            st.session_state.controller.step()
+            st.session_state.fleet.step()
 
     with col2:
-        label = "Stop Simulation" if st.session_state.autorun else "Start Simulation"
+        label = "Stop" if st.session_state.autorun else "Start Simulation"
         if st.button(label, use_container_width=True):
             st.session_state.autorun = not st.session_state.autorun
 
     with col3:
-        if st.button("Reset System", type="primary", use_container_width=True):
-            st.session_state.controller.reset()
+        if st.button("Reset", type="primary", use_container_width=True):
+            st.session_state.fleet.reset()
             st.session_state.autorun = False
             st.rerun()
 
 
 def render_fleet_table():
-    """Render the fleet status table with RUL predictions."""
+    """Render the fleet status table."""
     st.subheader("Fleet Status")
 
-    fleet_data = st.session_state.controller.get_fleet_table()
+    fleet_data = st.session_state.fleet.get_status()
 
     if not fleet_data:
         st.info("No data available. Start the simulation.")
         return
 
-    # Create and format dataframe
+    # Create and format DataFrame
     df = pd.DataFrame(fleet_data)
 
     if "rul_prediction" in df.columns:
@@ -118,39 +106,39 @@ def render_fleet_table():
     st.dataframe(
         df.style
         .background_gradient(subset=["rul_prediction"], cmap="RdYlGn", vmin=0, vmax=150)
-        .format({"rul_prediction": "{:.2f}"}, na_rep="—"),
+        .format({"rul_prediction": "{:.2f}"}, na_rep="-"),
         use_container_width=True,
         height=350,
     )
 
 
 def render_engine_detail():
-    """Render the engine detail section with charts."""
+    """Render the engine detail section."""
     st.subheader("Engine Detail")
 
     # Get available engine IDs
-    available_ids = sorted(list(st.session_state.controller.history.keys()))
+    available_ids = st.session_state.fleet.get_engine_ids()
 
     if not available_ids:
-        st.write("Waiting for engine data...")
+        st.write("Waiting for data...")
         return
 
     # Engine selection
-    selected_id = st.selectbox("Select Engine ID for analysis:", available_ids)
+    selected_id = st.selectbox("Select engine:", available_ids)
 
     # Get engine history
-    engine_df = st.session_state.controller.get_engine_history_df(selected_id)
+    engine_df = st.session_state.fleet.get_engine_history(selected_id)
 
     if engine_df.empty:
-        st.warning("Insufficient data for the selected engine.")
+        st.warning("Insufficient data for selected engine.")
         return
 
     # RUL trend chart
     st.plotly_chart(charts.create_rul_chart(engine_df), use_container_width=True)
 
-    # Sensor telemetry grid
+    # Sensor grid
     st.markdown("##### Sensor Telemetry")
-    sensors = getattr(st.session_state.controller, "feature_cols", None)
+    sensors = st.session_state.fleet.feature_cols
     st.plotly_chart(
         charts.create_sensor_grid(engine_df, sensors_to_plot=sensors),
         use_container_width=True
@@ -165,5 +153,5 @@ def handle_autorun():
     """Handle the automatic simulation loop."""
     if st.session_state.autorun:
         time.sleep(UPDATE_DELAY)
-        st.session_state.controller.step()
+        st.session_state.fleet.step()
         st.rerun()

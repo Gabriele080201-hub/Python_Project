@@ -1,8 +1,12 @@
 """
 Predictive Maintenance Dashboard
 
-Main entry point for the Streamlit application.
-Provides real-time monitoring and RUL predictions for aircraft engines.
+Entry point for the Streamlit application.
+Monitors an aircraft engine fleet in real-time
+and predicts the Remaining Useful Life (RUL).
+
+To run:
+    streamlit run app.py
 """
 
 import streamlit as st
@@ -10,17 +14,18 @@ import streamlit as st
 from ui import components
 from ui.config import PAGE_CONFIG, PAGE_TITLE
 
+
 # Configure page
 st.set_page_config(**PAGE_CONFIG)
 
-# Initialize state (loads model, scaler, data)
+# Initialize state (loads model and data)
 components.initialize_state()
 
-# Page header
+# Header
 st.title(PAGE_TITLE)
-st.markdown("Real-time monitoring system for aircraft engine fleet.")
+st.markdown("Real-time monitoring system for engine fleet.")
 
-# Control bar (buttons)
+# Control bar
 components.render_control_bar()
 
 st.divider()
@@ -30,7 +35,7 @@ components.render_fleet_table()
 
 st.divider()
 
-# Engine detail (charts)
+# Selected engine detail
 components.render_engine_detail()
 
 # Handle automatic simulation
