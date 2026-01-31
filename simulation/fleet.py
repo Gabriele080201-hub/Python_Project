@@ -101,7 +101,7 @@ class Fleet:
 
     def get_engine(self, engine_id):
         """
-        Return an angine given its id
+        Return an engine given its id
         """
         return self.engines.get(engine_id)
 

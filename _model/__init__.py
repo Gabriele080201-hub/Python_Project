@@ -1,6 +1,5 @@
 """
-Private module containing the ML model implementation.
+Model package.
 
-This module should not be used directly.
-Use the Predictor class from predictor.py instead.
+This package contains the neural network for RUL prediction. 
 """

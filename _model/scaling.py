@@ -1,7 +1,8 @@
 """
-Scaler for time series data.
+Scaling
 
-DO NOT use directly - use the Predictor class.
+This module provides the TimeSeriesScaler class for normalizing
+3D time series data (batch, time_steps, features).
 """
 
 import numpy as np
@@ -10,28 +11,42 @@ from sklearn.preprocessing import StandardScaler
 
 class TimeSeriesScaler:
     """
-    Scaler for 3D data (batch, time_steps, features).
+    Scaler for 3D time series data.
 
-    Normalizes data using sklearn StandardScaler,
-    automatically handling the required reshape.
+    Uses sklearn StandardScaler internally, handling
+    the reshape from 3D to 2D and back.
     """
 
     def __init__(self):
+        """Create a new TimeSeriesScaler."""
         self.scaler = StandardScaler()
         self.is_fitted = False
 
     def fit(self, X):
-        """Fit the scaler on training data."""
-        X_reshaped = X.reshape(-1, X.shape[-1])
-        self.scaler.fit(X_reshaped)
+        """
+        Fit the scaler on training data.
+
+        Args:
+            X: numpy array of shape (batch, time_steps, features)
+        """
+        X_flat = X.reshape(-1, X.shape[-1])
+        self.scaler.fit(X_flat)
         self.is_fitted = True
         return self
 
     def transform(self, X):
-        """Transform data using the fitted scaler."""
+        """
+        Transform data using the fitted scaler.
+
+        Args:
+            X: numpy array of shape (batch, time_steps, features)
+
+        Returns:
+            Scaled array with same shape as input
+        """
         original_shape = X.shape
-        X_reshaped = X.reshape(-1, X.shape[-1])
-        X_scaled = self.scaler.transform(X_reshaped)
+        X_flat = X.reshape(-1, X.shape[-1])
+        X_scaled = self.scaler.transform(X_flat)
         return X_scaled.reshape(original_shape)
 
     def fit_transform(self, X):
@@ -41,6 +56,6 @@ class TimeSeriesScaler:
     def inverse_transform(self, X):
         """Reverse the transformation."""
         original_shape = X.shape
-        X_reshaped = X.reshape(-1, X.shape[-1])
-        X_original = self.scaler.inverse_transform(X_reshaped)
+        X_flat = X.reshape(-1, X.shape[-1])
+        X_original = self.scaler.inverse_transform(X_flat)
         return X_original.reshape(original_shape)
